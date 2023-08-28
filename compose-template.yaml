@@ -1,0 +1,37 @@
+version: '3.9'
+name: tp0
+services:
+  server:
+    container_name: server
+    image: server:latest
+    entrypoint: python3 /main.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGGING_LEVEL=DEBUG
+    networks:
+      - testing_net
+{% for client, config in clients.items() %}
+  {{ client }}:
+    container_name: {{ config.container_name }}
+    image: {{ config.image }}
+    entrypoint: {{ config.entrypoint }}
+    environment:
+{%- for env_var in config.environment %}
+      - {{ env_var }}
+{%- endfor %}
+    networks:
+{%- for network in config.networks %}
+      - {{ network }}
+{%- endfor %}
+    depends_on:
+{%- for dependency in config.depends_on %}
+      - {{ dependency }}
+{%- endfor %}
+{% endfor %}
+networks:
+  testing_net:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.125.0/24
+

@@ -33,7 +33,19 @@ services:
     networks:
       - testing_net
     depends_on:
-      - server  
+      - server
+
+  client3:
+    container_name: client3
+    image: client:latest
+    entrypoint: /client
+    environment:
+      - CLI_ID=3
+      - CLI_LOG_LEVEL=DEBUG
+    networks:
+      - testing_net
+    depends_on:
+      - server
 
 networks:
   testing_net:
