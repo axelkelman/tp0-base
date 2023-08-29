@@ -18,6 +18,9 @@ def generate_clients(number_of_clients):
             ],
             'depends_on': [
                 'server'
+            ],
+            'volumes': [
+                './client/config.yaml:/config.yaml'
             ]
         }
     return clients

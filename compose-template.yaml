@@ -10,6 +10,8 @@ services:
       - LOGGING_LEVEL=DEBUG
     networks:
       - testing_net
+    volumes:
+      - ./server/config.ini:/config.ini
 {% for client, config in clients.items() %}
   {{ client }}:
     container_name: {{ config.container_name }}
@@ -26,6 +28,10 @@ services:
     depends_on:
 {%- for dependency in config.depends_on %}
       - {{ dependency }}
+{%- endfor %}
+    volumes: 
+{%- for volume in config.volumes %}
+      - {{ volume }}
 {%- endfor %}
 {% endfor %}
 networks:
