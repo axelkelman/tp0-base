@@ -41,6 +41,18 @@ services:
     volumes:
       - ./client/config.yaml:/config.yaml
 
+  script:
+    build: 
+      context: ./script
+    container_name: script
+    image: script:latest
+    networks:
+      - testing_net
+    depends_on:
+      - server
+    volumes:
+      - ./script/config.sh:/config.sh
+      
 networks:
   testing_net:
     ipam:
