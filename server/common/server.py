@@ -8,6 +8,7 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._sigterm_received = False
 
     def run(self):
         """
@@ -20,9 +21,10 @@ class Server:
 
         # TODO: Modify this program to handle signal to graceful shutdown
         # the server
-        while True:
+        while not self._sigterm_received:
             client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
+            if client_sock is not None:
+                self.__handle_client_connection(client_sock)        
 
     def __handle_client_connection(self, client_sock):
         """
@@ -53,6 +55,16 @@ class Server:
 
         # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
-        c, addr = self._server_socket.accept()
+        try:
+            c, addr = self._server_socket.accept()
+        except OSError:
+            return
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
-        return c
+        return c 
+    
+    def _sigterm_handler(self,signum,frame):
+        logging.info('action: receive_sigterm')
+        self._sigterm_received = True
+        logging.info('action: closing server socket | result: in_progress')
+        self._server_socket.close()
+        logging.info('action: closing server socket | result: sucess')        
