@@ -1,11 +1,8 @@
 package common
 
 import (
-	"bufio"
-	"fmt"
 	"net"
 	"os"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -14,8 +11,6 @@ import (
 type ClientConfig struct {
 	ID            string
 	ServerAddress string
-	LoopLapse     time.Duration
-	LoopPeriod    time.Duration
 }
 
 // Client Entity that encapsulates how
@@ -52,54 +47,84 @@ func (c *Client) createClientSocket() error {
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) StartClientLoop() {
-	// autoincremental msgID to identify every message sent
-	msgID := 1
+func (c *Client) SendClientBet(b Bet) {
 
-loop:
-	// Send messages if the loopLapse threshold has not been surpassed
-	for timeout := time.After(c.config.LoopLapse); ; {
-		select {
-		case <-timeout:
-			log.Infof("action: timeout_detected | result: success | client_id: %v",
-				c.config.ID,
-			)
-			break loop
-		case <-c.sigterm_ch:
-			log.Infof("action: sigterm_received")
-			break loop
-		default:
-		}
-
-		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
-
-		// TODO: Modify the send to avoid short-write
-		fmt.Fprintf(
-			c.conn,
-			"[CLIENT %v] Message N°%v\n",
-			c.config.ID,
-			msgID,
-		)
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
-		msgID++
-		c.conn.Close()
-
-		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
-		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-			c.config.ID,
-			msg,
-		)
-
-		// Wait a time between sending one message and the next one
-		time.Sleep(c.config.LoopPeriod)
+	select {
+	case <-c.sigterm_ch:
+		log.Infof("action: sigterm_received")
+		return
+	default:
 	}
 
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+	log.Debugf("action: showing_bet | result: success | name: %v | surname: %v | document: %v | birthday: %v | number: %v",
+		b.Data.Name,
+		b.Data.Surname,
+		b.Data.Document,
+		b.Data.Birthday,
+		b.Data.Number,
+	)
+
+	// Create the connection to the server
+	c.createClientSocket()
+
+	bet := b.BetToBytes()
+
+	c.SendMessage(bet)
+
+	msg, err := c.ReadMessage()
+
+	c.conn.Close()
+	if err != nil {
+		log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
+	response := BetAckFromBytes(msg)
+
+	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
+		response.Data.Document,
+		response.Data.Number,
+	)
+
+}
+
+// Sends a message to the server
+func (c *Client) SendMessage(b []byte) {
+	sent_bytes := 0
+	bytes_to_send := len(b)
+	for sent_bytes < bytes_to_send {
+		sent, err := c.conn.Write(b[sent_bytes:])
+
+		if err != nil {
+			return
+		}
+
+		sent_bytes += sent
+	}
+
+}
+
+// Receives a message from the server. In
+// case of failure returns and error
+func (c *Client) ReadMessage() (bytes []byte, err error) {
+	msg := make([]byte, 1024)
+	read_bytes := 0
+	size_of_packet := 1
+	size_read := false //Indicates whether the size of the packet has already been read or not
+	for read_bytes < size_of_packet {
+		read, err := c.conn.Read(msg[read_bytes:])
+		if err != nil {
+			return msg, err
+		}
+		read_bytes += read
+		if !size_read {
+			size_of_packet = int(msg[2])
+			size_read = true
+		}
+	}
+
+	return msg, nil
 }

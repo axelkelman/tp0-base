@@ -1,6 +1,9 @@
 import socket
 import logging
 
+from .protocol import BET_PKT, BetAckPacket, bet_from_bytes
+from .utils import store_bets
+
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -34,12 +37,17 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            
+            bytes,addr = self.__read_client_socket(client_sock)
+            if bytes[0] == BET_PKT:
+                packet = bet_from_bytes(bytes)
+                logging.info(f'action: receive_bet | result: success | ip: {addr[0]}')
+                store_bets([packet.bet])
+                logging.info(f'action: apuesta_almacenada | result: success | dni: {packet.bet.document} | numero: {packet.bet.number}')
+                bet_ack = BetAckPacket(packet.bet.document,str(packet.bet.number),"1",packet.bet.agency)
+                msg = bet_ack.bet_ack_to_bytes()
+            
+            self.__write_client_socket(msg,client_sock)
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
@@ -67,4 +75,29 @@ class Server:
         self._sigterm_received = True
         logging.info('action: closing server socket | result: in_progress')
         self._server_socket.close()
-        logging.info('action: closing server socket | result: sucess')        
+        logging.info('action: closing server socket | result: sucess')
+        
+    def __read_client_socket(self,client_sock):
+        """Reads message from a specific socket client"""
+        bytes_read = 0
+        bytes = []
+        size_of_packet = 1
+        size_read = False
+        while bytes_read < size_of_packet:
+            bytes += list(client_sock.recv(1024))
+            bytes_read += len(bytes)
+            if not size_read:
+                size_of_packet = bytes[2]
+                size_read = True
+        
+        addr = client_sock.getpeername()
+        return bytes,addr
+    
+    def __write_client_socket(self,msg,client_sock):
+        """Writes message to a specific socket client"""
+        sent_bytes = 0
+        while sent_bytes < len(msg):
+            sent = client_sock.send(msg[sent_bytes:])
+            sent_bytes += sent
+            
+        

@@ -6,9 +6,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -35,9 +33,12 @@ func InitConfig() (*viper.Viper, error) {
 	// Add env variables supported
 	v.BindEnv("id")
 	v.BindEnv("server", "address")
-	v.BindEnv("loop", "period")
-	v.BindEnv("loop", "lapse")
 	v.BindEnv("log", "level")
+	v.BindEnv("bet", "name")
+	v.BindEnv("bet", "surname")
+	v.BindEnv("bet", "document")
+	v.BindEnv("bet", "birthday")
+	v.BindEnv("bet", "number")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -46,15 +47,6 @@ func InitConfig() (*viper.Viper, error) {
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
-	}
-
-	// Parse time.Duration variables and return an error if those variables cannot be parsed
-	if _, err := time.ParseDuration(v.GetString("loop.lapse")); err != nil {
-		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_LAPSE env var as time.Duration.")
-	}
-
-	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
-		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}
 
 	return v, nil
@@ -81,11 +73,9 @@ func InitLogger(logLevel string) error {
 // PrintConfig Print all the configuration parameters of the program.
 // For debugging purposes only
 func PrintConfig(v *viper.Viper) {
-	logrus.Infof("action: config | result: success | client_id: %s | server_address: %s | loop_lapse: %v | loop_period: %v | log_level: %s",
+	logrus.Infof("action: config | result: success | client_id: %s | server_address: %s | log_level: %s",
 		v.GetString("id"),
 		v.GetString("server.address"),
-		v.GetDuration("loop.lapse"),
-		v.GetDuration("loop.period"),
 		v.GetString("log.level"),
 	)
 }
@@ -106,12 +96,19 @@ func main() {
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
-		LoopLapse:     v.GetDuration("loop.lapse"),
-		LoopPeriod:    v.GetDuration("loop.period"),
+	}
+
+	betData := common.BetData{
+		Name:     v.GetString("bet.name"),
+		Surname:  v.GetString("bet.surname"),
+		Document: v.GetString("bet.document"),
+		Birthday: v.GetString("bet.birthday"),
+		Number:   v.GetString("bet.number"),
 	}
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM)
 	client := common.NewClient(clientConfig, c)
-	client.StartClientLoop()
+	bet := common.NewBet(betData, uint8(v.GetUint("id")))
+	client.SendClientBet(*bet)
 }

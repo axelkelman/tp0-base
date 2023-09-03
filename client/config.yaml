@@ -1,8 +1,11 @@
 # id: 1
 server:
   address: "server:12345"
-loop:
-  lapse: "0m20s"
-  period: "5s"
 log:
   level: "info"
+bet:
+  name: "Santiago Lionel"
+  surname: "Lorca"
+  document: "30904465"
+  birthday: "1999-03-17"
+  number: "7574"
