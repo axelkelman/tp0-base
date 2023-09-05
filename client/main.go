@@ -34,11 +34,8 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("id")
 	v.BindEnv("server", "address")
 	v.BindEnv("log", "level")
-	v.BindEnv("bet", "name")
-	v.BindEnv("bet", "surname")
-	v.BindEnv("bet", "document")
-	v.BindEnv("bet", "birthday")
-	v.BindEnv("bet", "number")
+	v.BindEnv("bets", "path")
+	v.BindEnv("bets", "m")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -98,17 +95,14 @@ func main() {
 		ID:            v.GetString("id"),
 	}
 
-	betData := common.BetData{
-		Name:     v.GetString("bet.name"),
-		Surname:  v.GetString("bet.surname"),
-		Document: v.GetString("bet.document"),
-		Birthday: v.GetString("bet.birthday"),
-		Number:   v.GetString("bet.number"),
-	}
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM)
 	client := common.NewClient(clientConfig, c)
-	bet := common.NewBet(betData, uint8(v.GetUint("id")))
-	client.SendClientBet(*bet)
+
+	n := v.GetInt("bets.m")
+	if n > 128 {
+		log.Errorf("n must be lower or equal to 128")
+		return
+	}
+	client.SendClientBets(v.GetString("bets.path"), uint8(v.GetUint("id")), n)
 }

@@ -26,6 +26,7 @@ services:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./client/data:/data
 
   client2:
     container_name: client2
@@ -40,6 +41,7 @@ services:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./client/data:/data
 
   client3:
     container_name: client3
@@ -54,6 +56,7 @@ services:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./client/data:/data
 
   client4:
     container_name: client4
@@ -68,6 +71,7 @@ services:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./client/data:/data
 
   client5:
     container_name: client5
@@ -82,6 +86,7 @@ services:
       - server
     volumes:
       - ./client/config.yaml:/config.yaml
+      - ./client/data:/data
 
       
 networks:

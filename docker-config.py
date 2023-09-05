@@ -20,7 +20,8 @@ def generate_clients(number_of_clients):
                 'server'
             ],
             'volumes': [
-                './client/config.yaml:/config.yaml'
+                './client/config.yaml:/config.yaml',
+                './client/data:/data'
             ]
         }
     return clients

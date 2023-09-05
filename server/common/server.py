@@ -1,9 +1,10 @@
 import socket
 import logging
 
-from .protocol import BET_PKT, BetAckPacket, bet_from_bytes
+from .protocol import BATCH_PKT, batch_from_bytes, FINISHED_PKT, BatchAckPacket
 from .utils import store_bets
 
+BLOCK_SIZE = 8192
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -31,22 +32,27 @@ class Server:
 
     def __handle_client_connection(self, client_sock):
         """
-        Read message from a specific client socket and closes the socket
+        Reads batch from the client until the client is done
 
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
         try:
-            
-            bytes,addr = self.__read_client_socket(client_sock)
-            if bytes[0] == BET_PKT:
-                packet = bet_from_bytes(bytes)
-                logging.info(f'action: receive_bet | result: success | ip: {addr[0]}')
-                store_bets([packet.bet])
-                logging.info(f'action: apuesta_almacenada | result: success | dni: {packet.bet.document} | numero: {packet.bet.number}')
-                bet_ack = BetAckPacket(packet.bet.document,str(packet.bet.number),"1",packet.bet.agency)
-                msg = bet_ack.bet_ack_to_bytes()
-            
+            while True:     
+                bytes,addr = self.__read_client_socket(client_sock)
+                if bytes == 0:
+                    logging.error("action: receive_message | result: fail")
+                    client_sock.close()
+                    return
+                if bytes[0] == BATCH_PKT:
+                    packet = batch_from_bytes(bytes)
+                    store_bets([b.bet for b in packet.bets])
+                    logging.info(f'action: receive_batch | result: success | ip: {addr[0]}')                    
+                if bytes[0] == FINISHED_PKT:
+                    logging.info(f'action: receive_finished_pkt | result: success | ip: {addr[0]}')
+                    msg = BatchAckPacket("1",bytes[1]).bet_ack_to_bytes()
+                    break                   
+                
             self.__write_client_socket(msg,client_sock)
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
@@ -78,26 +84,36 @@ class Server:
         logging.info('action: closing server socket | result: sucess')
         
     def __read_client_socket(self,client_sock):
-        """Reads message from a specific socket client"""
+        """
+        Reads message from a specific socket client. Reads until it reaches
+        BLOCK_SIZE amount of bytes
+        """
         bytes_read = 0
         bytes = []
-        size_of_packet = 1
+        size_of_packet = 0
         size_read = False
-        while bytes_read < size_of_packet:
-            bytes += list(client_sock.recv(1024))
-            bytes_read += len(bytes)
+        while bytes_read < BLOCK_SIZE:
+            bytes += list(client_sock.recv(BLOCK_SIZE - bytes_read))
+            bytes_read = len(bytes)
             if not size_read:
-                size_of_packet = bytes[2]
-                size_read = True
+                if bytes_read == 0:
+                    return 0,None
+                size_of_packet = (bytes[3] << 8) | bytes[2]
+                size_read = True                
         
         addr = client_sock.getpeername()
-        return bytes,addr
+        return bytes[:size_of_packet],addr
     
     def __write_client_socket(self,msg,client_sock):
-        """Writes message to a specific socket client"""
+        """
+        Writes message to a specific socket client. Adds necessary padding to reach
+        BLOCK_SIZE amount of bytes to send
+        """
         sent_bytes = 0
-        while sent_bytes < len(msg):
-            sent = client_sock.send(msg[sent_bytes:])
+        padding_length = BLOCK_SIZE - len(msg)
+        message = msg + (b'\x00' * padding_length)
+        while sent_bytes < BLOCK_SIZE:
+            sent = client_sock.send(message[sent_bytes:])
             sent_bytes += sent
             
         

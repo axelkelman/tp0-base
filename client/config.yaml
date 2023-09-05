@@ -3,9 +3,7 @@ server:
   address: "server:12345"
 log:
   level: "info"
-bet:
-  name: "Santiago Lionel"
-  surname: "Lorca"
-  document: "30904465"
-  birthday: "1999-03-17"
-  number: "7574"
+bets:
+  path: "./data/agency-.csv"
+  m: "128"
+

@@ -1,11 +1,15 @@
 package common
 
 import (
+	"bufio"
 	"net"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
+
+const BlockSize = 8192
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
@@ -46,63 +50,101 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-// StartClientLoop Send messages to the client until some time threshold is met
-func (c *Client) SendClientBet(b Bet) {
-
-	select {
-	case <-c.sigterm_ch:
-		log.Infof("action: sigterm_received")
-		return
-	default:
-	}
-
-	log.Debugf("action: showing_bet | result: success | name: %v | surname: %v | document: %v | birthday: %v | number: %v",
-		b.Data.Name,
-		b.Data.Surname,
-		b.Data.Document,
-		b.Data.Birthday,
-		b.Data.Number,
-	)
-
-	// Create the connection to the server
-	c.createClientSocket()
-
-	bet := b.BetToBytes()
-
-	c.SendMessage(bet)
-
-	msg, err := c.ReadMessage()
-
-	c.conn.Close()
+// SendClientBets sends all client bets in batch of size n max
+func (c *Client) SendClientBets(bets string, id uint8, n int) {
+	file, err := os.Open(c.GetBetsPath(bets))
 	if err != nil {
-		log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | error: %v",
+		log.Errorf("action: opening_bets_file | result: fail | error: %v", err)
+		return
+	}
+	c.createClientSocket()
+	scanner := bufio.NewScanner(file)
+	log.Infof("action: sending_batchs | result: in_progress")
+loop:
+	for {
+		select {
+		case <-c.sigterm_ch:
+			log.Infof("action: sigterm_received")
+			c.Shutdown(file, true)
+			return
+		default:
+		}
+
+		var batchBets []string
+		for i := 0; i < n; i++ {
+			if !scanner.Scan() {
+				if i == 0 {
+					break loop
+				}
+				break
+			}
+			batchBets = append(batchBets, scanner.Text())
+		}
+
+		batch := NewBatch(batchBets, id)
+		batchBytes := batch.BatchToBytes()
+		c.SendMessage(batchBytes)
+	}
+	log.Infof("action: sending_finished_message | result: in_progress")
+	c.SendMessage(NewFinished(id).FinishedToBytes())
+	log.Infof("action: sending_finished_message | result: sucess")
+	response, err := c.ReadMessage()
+
+	c.Shutdown(file, false)
+	if err != nil {
+		log.Errorf("action: sending_batchs | result: fail | client_id: %v | error: %v",
 			c.config.ID,
 			err,
 		)
 		return
 	}
 
-	response := BetAckFromBytes(msg)
-
-	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-		response.Data.Document,
-		response.Data.Number,
-	)
+	batchAck := BatchAckFromBytes(response)
+	if batchAck.Status == "1" {
+		log.Infof("action: sending_batchs | result: success")
+	} else {
+		log.Infof("action: sending_batchs | result: fail")
+	}
 
 }
 
-// Sends a message to the server
+// Closes client socket and file descriptor
+func (c *Client) Shutdown(file *os.File, signal bool) {
+	log.Infof("action: closing_socket | result: in_progress")
+	c.conn.Close()
+	log.Infof("action: closing_socket | result: success")
+	log.Infof("action: closing_file_descriptor | result: in_progress")
+	file.Close()
+	log.Infof("action: closing_file_descriptor | result: success")
+	if signal {
+		log.Infof("action: exiting_gracefully | result: success")
+	}
+}
+
+// Returns the path of the bets csv file which corresponds to this client
+func (c *Client) GetBetsPath(bets string) string {
+	aux := strings.Split(bets, "-")
+	path := aux[0] + "-" + c.config.ID + ".csv"
+	log.Infof("csv_path_file : %v", path)
+	return path
+}
+
+// Sends a message to the server, adds the necessary padding to reach blocksize
 func (c *Client) SendMessage(b []byte) {
-	sent_bytes := 0
-	bytes_to_send := len(b)
-	for sent_bytes < bytes_to_send {
-		sent, err := c.conn.Write(b[sent_bytes:])
+	sentBytes := 0
+	bytesToSend := len(b)
+	paddingLength := BlockSize - bytesToSend
+	padding := make([]byte, paddingLength)
+	message := append(b, padding...)
+
+	for sentBytes < BlockSize {
+		sent, err := c.conn.Write(message[sentBytes:])
 
 		if err != nil {
 			return
 		}
 
-		sent_bytes += sent
+		sentBytes += sent
 	}
 
 }
@@ -110,21 +152,21 @@ func (c *Client) SendMessage(b []byte) {
 // Receives a message from the server. In
 // case of failure returns and error
 func (c *Client) ReadMessage() (bytes []byte, err error) {
-	msg := make([]byte, 1024)
-	read_bytes := 0
-	size_of_packet := 1
-	size_read := false //Indicates whether the size of the packet has already been read or not
-	for read_bytes < size_of_packet {
-		read, err := c.conn.Read(msg[read_bytes:])
+	msg := make([]byte, BlockSize)
+	readBytes := 0
+	sizeOfPacket := 0
+	sizeRead := false //Indicates whether the size of the packet has already been read or not
+	for readBytes < BlockSize {
+		read, err := c.conn.Read(msg[readBytes:])
 		if err != nil {
 			return msg, err
 		}
-		read_bytes += read
-		if !size_read {
-			size_of_packet = int(msg[2])
-			size_read = true
+		readBytes += read
+		if !sizeRead {
+			sizeOfPacket = int(msg[2])
+			sizeRead = true
 		}
 	}
 
-	return msg, nil
+	return msg[:sizeOfPacket], nil
 }
