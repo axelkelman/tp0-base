@@ -13,7 +13,8 @@ class PacketHeader:
         self.id = id
         
     def header_to_bytes(self,payload_size):
-        return [self.packet_type,self.id,payload_size + 3]
+        header_bytes = [self.packet_type,self.id,payload_size + 4]
+        return bytearray(header_bytes[0:2]) + bytearray([header_bytes[2] & 0xFF, (header_bytes[2] >> 8) & 0xFF])
         
 
 class BetPacket:
@@ -62,5 +63,5 @@ class BatchAckPacket:
         format_payload = self.status
         header_bytes = self.header.header_to_bytes(len(format_payload))
         payload_encode = format_payload.encode('utf-8')
-        ret = bytearray(header_bytes) + payload_encode
+        ret = header_bytes + payload_encode
         return ret 

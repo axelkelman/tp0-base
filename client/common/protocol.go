@@ -136,7 +136,7 @@ type BatchAck struct {
 
 // Providing an array of bytes, returns a BatchAck packet
 func BatchAckFromBytes(bytes []byte) *BatchAck {
-	status := string(bytes[3])
+	status := string(bytes[4])
 	ack := &BatchAck{
 		Header: PacketHeader{
 			PacketType: bytes[0],

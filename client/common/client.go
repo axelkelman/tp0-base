@@ -163,7 +163,7 @@ func (c *Client) ReadMessage() (bytes []byte, err error) {
 		}
 		readBytes += read
 		if !sizeRead {
-			sizeOfPacket = int(msg[2])
+			sizeOfPacket = int(msg[3])<<8 | int(msg[2])
 			sizeRead = true
 		}
 	}
