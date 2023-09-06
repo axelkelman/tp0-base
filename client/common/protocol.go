@@ -7,6 +7,7 @@ import (
 const BetPacketId = 1
 const BatchPacketId = 3
 const FinishedPacketId = 4
+const WinnerPacketId = 6
 
 // Packet Header common to every packet in the protocol
 type PacketHeader struct {
@@ -145,4 +146,52 @@ func BatchAckFromBytes(bytes []byte) *BatchAck {
 		Status: status,
 	}
 	return ack
+}
+
+// Winner packet
+type Winner struct {
+	Header  PacketHeader
+	Status  string
+	Winners []string
+}
+
+// Returns a new winner packet
+func NewWinner(id uint8, status string) *Winner {
+	var w []string
+	winner := &Winner{
+		Header: PacketHeader{
+			PacketType: WinnerPacketId,
+			ID:         id,
+		},
+		Status:  status,
+		Winners: w,
+	}
+	return winner
+}
+
+// Converts a winner packet into an array of bytes
+func (w *Winner) WinnerToBytes() []byte {
+	status_byte := []byte(w.Status)
+	header_bytes := w.Header.HeaderToBytes(1)
+	bytes := append(header_bytes, status_byte...)
+	return bytes
+}
+
+// Providing an array of bytes, returns a Winner packet
+func WinnerFromBytes(bytes []byte) *Winner {
+	status := string(bytes[4])
+	var winners []string
+	winners = strings.Split(string(bytes[5:]), "|")
+	if len(bytes) == 5 {
+		winners = []string{}
+	}
+	winner := &Winner{
+		Header: PacketHeader{
+			PacketType: bytes[0],
+			ID:         bytes[1],
+		},
+		Status:  status,
+		Winners: winners,
+	}
+	return winner
 }

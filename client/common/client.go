@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -65,7 +66,8 @@ loop:
 		select {
 		case <-c.sigterm_ch:
 			log.Infof("action: sigterm_received")
-			c.Shutdown(file, true)
+			c.CloseClientFileDescriptor(file)
+			c.CloseClientSocket(true)
 			return
 		default:
 		}
@@ -90,7 +92,8 @@ loop:
 	log.Infof("action: sending_finished_message | result: sucess")
 	response, err := c.ReadMessage()
 
-	c.Shutdown(file, false)
+	c.CloseClientFileDescriptor(file)
+	c.CloseClientSocket(false)
 	if err != nil {
 		log.Errorf("action: sending_batchs | result: fail | client_id: %v | error: %v",
 			c.config.ID,
@@ -105,17 +108,61 @@ loop:
 	} else {
 		log.Infof("action: sending_batchs | result: fail")
 	}
+}
+
+// Sends a Winner Packet to the server until the server responds
+func (c *Client) GetWinners(id uint8) {
+	finished := false
+	f := 1
+
+	for !finished {
+		c.createClientSocket()
+		select {
+		case <-c.sigterm_ch:
+			log.Infof("action: sigterm_received")
+			c.CloseClientSocket(true)
+			return
+		default:
+		}
+
+		winner := NewWinner(id, "1")
+		c.SendMessage(winner.WinnerToBytes())
+
+		response, err := c.ReadMessage()
+		if err != nil {
+			log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+			return
+		}
+		winnerResponse := WinnerFromBytes(response)
+		if winnerResponse.Status == "1" {
+			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", len(winnerResponse.Winners))
+			finished = true
+			c.CloseClientSocket(false)
+			break
+		}
+		log.Infof("action: consulta_ganadores | result: waiting")
+		time.Sleep(time.Second * time.Duration(f))
+		f *= 2
+		c.CloseClientSocket(false)
+	}
 
 }
 
-// Closes client socket and file descriptor
-func (c *Client) Shutdown(file *os.File, signal bool) {
-	log.Infof("action: closing_socket | result: in_progress")
-	c.conn.Close()
-	log.Infof("action: closing_socket | result: success")
+// Closes client file descriptor and logs it
+func (c *Client) CloseClientFileDescriptor(file *os.File) {
 	log.Infof("action: closing_file_descriptor | result: in_progress")
 	file.Close()
 	log.Infof("action: closing_file_descriptor | result: success")
+}
+
+// Closes client socket and logs it
+func (c *Client) CloseClientSocket(signal bool) {
+	log.Infof("action: closing_socket | result: in_progress")
+	c.conn.Close()
+	log.Infof("action: closing_socket | result: success")
 	if signal {
 		log.Infof("action: exiting_gracefully | result: success")
 	}

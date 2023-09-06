@@ -5,6 +5,7 @@ BET_ACK_PKT = 2
 BATCH_PKT = 3
 FINISHED_PKT = 4
 BATCH_ACK_PKT = 5
+WINNER_PKT = 6
 
 class PacketHeader:
     """Header common to every packet in the protocol"""
@@ -65,3 +66,25 @@ class BatchAckPacket:
         payload_encode = format_payload.encode('utf-8')
         ret = header_bytes + payload_encode
         return ret 
+    
+class WinnerPacket:
+    """
+    A packet sent to the client indicating if the winners of the lottery
+    have already been calculated (in this case they are returned) or not
+    
+    When sent from the client to the server it indicates that the client wants
+    to know the winners of the lottery    
+    """
+    def __init__(self,status,id,winners):
+        self.header = PacketHeader(WINNER_PKT,id)
+        self.status = status
+        self.winners = winners
+        
+    def winner_to_bytes(self):
+        """Converts a WinnerPacket to an array of bytes"""
+        winners_format = ""
+        for w in self.winners:
+            winners_format += "|" + w.document
+        payload = self.status + winners_format[1:]
+        header_bytes = self.header.header_to_bytes(len(payload))
+        return header_bytes + payload.encode('utf-8')

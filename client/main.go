@@ -105,4 +105,5 @@ func main() {
 		return
 	}
 	client.SendClientBets(v.GetString("bets.path"), uint8(v.GetUint("id")), n)
+	client.GetWinners(uint8(v.GetUint("id")))
 }

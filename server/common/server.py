@@ -1,10 +1,11 @@
 import socket
 import logging
 
-from .protocol import BATCH_PKT, batch_from_bytes, FINISHED_PKT, BatchAckPacket
-from .utils import store_bets
+from .protocol import BATCH_PKT, batch_from_bytes, FINISHED_PKT, BatchAckPacket, WINNER_PKT, WinnerPacket
+from .utils import store_bets, load_bets, has_won
 
 BLOCK_SIZE = 8192
+CLIENTS_AMOUNT = 5
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -13,6 +14,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._sigterm_received = False
+        self._clients_ready = set()
 
     def run(self):
         """
@@ -32,7 +34,7 @@ class Server:
 
     def __handle_client_connection(self, client_sock):
         """
-        Reads batch from the client until the client is done
+        Reads winner message or batchs from the client until the client is done
 
         If a problem arises in the communication with the client, the
         client socket will also be closed
@@ -44,6 +46,15 @@ class Server:
                     logging.error("action: receive_message | result: fail")
                     client_sock.close()
                     return
+                if bytes[0] == WINNER_PKT:
+                    winners = []
+                    status = "0"
+                    if len(self._clients_ready) == CLIENTS_AMOUNT:
+                        winners = self.__get_winners(bytes[1])
+                        status = "1"
+                    msg = WinnerPacket(status,bytes[1],winners).winner_to_bytes()
+                    logging.info(f'action: receive_winner | result: success | ip: {addr[0]} | status: {status}') 
+                    break
                 if bytes[0] == BATCH_PKT:
                     packet = batch_from_bytes(bytes)
                     store_bets([b.bet for b in packet.bets])
@@ -51,6 +62,7 @@ class Server:
                 if bytes[0] == FINISHED_PKT:
                     logging.info(f'action: receive_finished_pkt | result: success | ip: {addr[0]}')
                     msg = BatchAckPacket("1",bytes[1]).bet_ack_to_bytes()
+                    self._clients_ready.add(bytes[1])
                     break                   
                 
             self.__write_client_socket(msg,client_sock)
@@ -59,6 +71,12 @@ class Server:
         finally:
             client_sock.close()
 
+    def __get_winners(self,agency):
+        """Gets the lottery winners from a certain agency"""
+        bets = list(load_bets())
+        winners = [b for b in bets if has_won(b) and b.agency == agency]
+        return winners
+    
     def __accept_new_connection(self):
         """
         Accept new connections
