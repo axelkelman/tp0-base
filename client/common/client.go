@@ -51,8 +51,8 @@ func (c *Client) createClientSocket() error {
 	return nil
 }
 
-// SendClientBets sends all client bets in batch of size n max
-func (c *Client) SendClientBets(bets string, id uint8, n int) {
+// Runs the client, first sending batchs of bets and then asking for the lottery result
+func (c *Client) RunClient(bets string, id uint8, n int) {
 	file, err := os.Open(c.GetBetsPath(bets))
 	if err != nil {
 		log.Errorf("action: opening_bets_file | result: fail | error: %v", err)
@@ -84,8 +84,13 @@ loop:
 		}
 
 		batch := NewBatch(batchBets, id)
-		batchBytes := batch.BatchToBytes()
-		c.SendMessage(batchBytes)
+		err := c.SendMessage(batch.BatchToBytes())
+		if err != nil {
+			c.LogCommunicationError("sending_batchs", err)
+			c.CloseClientFileDescriptor(file)
+			c.CloseClientSocket(false)
+			return
+		}
 	}
 	log.Infof("action: sending_finished_message | result: in_progress")
 	c.SendMessage(NewFinished(id).FinishedToBytes())
@@ -93,12 +98,9 @@ loop:
 	response, err := c.ReadMessage()
 
 	c.CloseClientFileDescriptor(file)
-	c.CloseClientSocket(false)
 	if err != nil {
-		log.Errorf("action: sending_batchs | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
+		c.LogCommunicationError("sending_batchs", err)
+		c.CloseClientSocket(false)
 		return
 	}
 
@@ -108,6 +110,7 @@ loop:
 	} else {
 		log.Infof("action: sending_batchs | result: fail")
 	}
+	c.GetWinners(id)
 }
 
 // Sends a Winner Packet to the server until the server responds
@@ -116,7 +119,6 @@ func (c *Client) GetWinners(id uint8) {
 	f := 1
 
 	for !finished {
-		c.createClientSocket()
 		select {
 		case <-c.sigterm_ch:
 			log.Infof("action: sigterm_received")
@@ -130,10 +132,8 @@ func (c *Client) GetWinners(id uint8) {
 
 		response, err := c.ReadMessage()
 		if err != nil {
-			log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
+			c.LogCommunicationError("consulta_ganadores", err)
+			c.CloseClientSocket(false)
 			return
 		}
 		winnerResponse := WinnerFromBytes(response)
@@ -146,9 +146,17 @@ func (c *Client) GetWinners(id uint8) {
 		log.Infof("action: consulta_ganadores | result: waiting")
 		time.Sleep(time.Second * time.Duration(f))
 		f *= 2
-		c.CloseClientSocket(false)
 	}
 
+}
+
+// Logs a communication error
+func (c *Client) LogCommunicationError(action string, err error) {
+	log.Errorf("action: %v | result: fail | client_id: %v | error: %v",
+		action,
+		c.config.ID,
+		err,
+	)
 }
 
 // Closes client file descriptor and logs it
@@ -176,24 +184,24 @@ func (c *Client) GetBetsPath(bets string) string {
 	return path
 }
 
-// Sends a message to the server, adds the necessary padding to reach blocksize
-func (c *Client) SendMessage(b []byte) {
+// Sends a message to the server, adds the necessary padding to reach blocksize.
+// In case of failure returns and error
+func (c *Client) SendMessage(b []byte) error {
 	sentBytes := 0
 	bytesToSend := len(b)
 	paddingLength := BlockSize - bytesToSend
 	padding := make([]byte, paddingLength)
 	message := append(b, padding...)
-
+	c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	for sentBytes < BlockSize {
 		sent, err := c.conn.Write(message[sentBytes:])
-
 		if err != nil {
-			return
+			return err
 		}
 
 		sentBytes += sent
 	}
-
+	return nil
 }
 
 // Receives a message from the server. In

@@ -104,6 +104,5 @@ func main() {
 		log.Errorf("n must be lower or equal to 128")
 		return
 	}
-	client.SendClientBets(v.GetString("bets.path"), uint8(v.GetUint("id")), n)
-	client.GetWinners(uint8(v.GetUint("id")))
+	client.RunClient(v.GetString("bets.path"), uint8(v.GetUint("id")), n)
 }
