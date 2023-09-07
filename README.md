@@ -1,133 +1,177 @@
-# TP0: Docker + Comunicaciones + Concurrencia
+# Informe 
 
-En el presente repositorio se provee un ejemplo de cliente-servidor el cual corre en containers con la ayuda de [docker-compose](https://docs.docker.com/compose/). El mismo es un ejemplo práctico brindado por la cátedra para que los alumnos tengan un esqueleto básico de cómo armar un proyecto de cero en donde todas las dependencias del mismo se encuentren encapsuladas en containers. El cliente (Golang) y el servidor (Python) fueron desarrollados en diferentes lenguajes simplemente para mostrar cómo dos lenguajes de programación pueden convivir en el mismo proyecto con la ayuda de containers.
 
-Por otro lado, se presenta una guía de ejercicios que los alumnos deberán resolver teniendo en cuenta las consideraciones generales descriptas al pie de este archivo.
 
-## Instrucciones de uso
-El repositorio cuenta con un **Makefile** que posee encapsulado diferentes comandos utilizados recurrentemente en el proyecto en forma de targets. Los targets se ejecutan mediante la invocación de:
+## Índice
+1. [Parte 1: Ejercicios](#Ejercicios)
+2. [Parte 2: Protocolo](#Protocolo)
+3. [Parte 3: Sincronización](#Sincronización)
 
-* **make \<target\>**:
-Los target imprescindibles para iniciar y detener el sistema son **docker-compose-up** y **docker-compose-down**, siendo los restantes targets de utilidad para el proceso de _debugging_ y _troubleshooting_.
+## 1. Ejercicios<a name="Ejercicios"></a>
 
-Los targets disponibles son:
-* **docker-compose-up**: Inicializa el ambiente de desarrollo (buildear docker images del servidor y cliente, inicializar la red a utilizar por docker, etc.) y arranca los containers de las aplicaciones que componen el proyecto.
-* **docker-compose-down**: Realiza un `docker-compose stop` para detener los containers asociados al compose y luego realiza un `docker-compose down` para destruir todos los recursos asociados al proyecto que fueron inicializados. Se recomienda ejecutar este comando al finalizar cada ejecución para evitar que el disco de la máquina host se llene.
-* **docker-compose-logs**: Permite ver los logs actuales del proyecto. Acompañar con `grep` para lograr ver mensajes de una aplicación específica dentro del compose.
-* **docker-image**: Buildea las imágenes a ser utilizadas tanto en el servidor como en el cliente. Este target es utilizado por **docker-compose-up**, por lo cual se lo puede utilizar para testear nuevos cambios en las imágenes antes de arrancar el proyecto.
-* **build**: Compila la aplicación cliente para ejecución en el _host_ en lugar de en docker. La compilación de esta forma es mucho más rápida pero requiere tener el entorno de Golang instalado en la máquina _host_.
+La siguiente sección tiene como objetivo mostrar como ejecutar cada ejercicio. Si se revisan las branchs del repositorio se puede ver que
+hay una branch que contiene hasta los ejercicios 1-4 y luego hay una branch por cada ejercicio siguiente. Esto es porque hay código
+que fue siendo removido de la solución avanzando de ejercicio en ejercicio (por ejemplo el servicio script de la plantilla que genera
+el docker-compose). Por lo tanto, para la correcta ejecución de cada ejercicio será necesario pararse en la branch correspondiente
+(además aquí esta la última versión de la resolución de cada ejercicio). El historial de commits se encuentra también nombrado y dividido
+según ejercicio
 
-### Servidor
-El servidor del presente ejemplo es un EchoServer: los mensajes recibidos por el cliente son devueltos inmediatamente. El servidor actual funciona de la siguiente forma:
-1. Servidor acepta una nueva conexión.
-2. Servidor recibe mensaje del cliente y procede a responder el mismo.
-3. Servidor desconecta al cliente.
-4. Servidor procede a recibir una conexión nuevamente.
+### 1.1 Docker
 
-### Cliente
-El cliente del presente ejemplo se conecta reiteradas veces al servidor y envía mensajes de la siguiente forma.
-1. Cliente se conecta al servidor.
-2. Cliente genera mensaje incremental.
-recibe mensaje del cliente y procede a responder el mismo.
-3. Cliente envía mensaje al servidor y espera mensaje de respuesta.
-Servidor desconecta al cliente.
-4. Cliente vuelve al paso 2.
-
-Al ejecutar el comando `make docker-compose-up` para comenzar la ejecución del ejemplo y luego el comando `make docker-compose-logs`, se observan los siguientes logs:
-
+Para los ejercicios 1-4 dirigirse a la branch docker con el siguiente comando:
 ```
-$ make docker-compose-logs
-docker compose -f docker-compose-dev.yaml logs -f
-client1  | time="2023-03-17 04:36:59" level=info msg="action: config | result: success | client_id: 1 | server_address: server:12345 | loop_lapse: 20s | loop_period: 5s | log_level: DEBUG"
-client1  | time="2023-03-17 04:36:59" level=info msg="action: receive_message | result: success | client_id: 1 | msg: [CLIENT 1] Message N°1\n"
-server   | 2023-03-17 04:36:59 DEBUG    action: config | result: success | port: 12345 | listen_backlog: 5 | logging_level: DEBUG
-server   | 2023-03-17 04:36:59 INFO     action: accept_connections | result: in_progress
-server   | 2023-03-17 04:36:59 INFO     action: accept_connections | result: success | ip: 172.25.125.3
-server   | 2023-03-17 04:36:59 INFO     action: receive_message | result: success | ip: 172.25.125.3 | msg: [CLIENT 1] Message N°1
-server   | 2023-03-17 04:36:59 INFO     action: accept_connections | result: in_progress
-server   | 2023-03-17 04:37:04 INFO     action: accept_connections | result: success | ip: 172.25.125.3
-server   | 2023-03-17 04:37:04 INFO     action: receive_message | result: success | ip: 172.25.125.3 | msg: [CLIENT 1] Message N°2
-server   | 2023-03-17 04:37:04 INFO     action: accept_connections | result: in_progress
-client1  | time="2023-03-17 04:37:04" level=info msg="action: receive_message | result: success | client_id: 1 | msg: [CLIENT 1] Message N°2\n"
-server   | 2023-03-17 04:37:09 INFO     action: accept_connections | result: success | ip: 172.25.125.3
-server   | 2023-03-17 04:37:09 INFO     action: receive_message | result: success | ip: 172.25.125.3 | msg: [CLIENT 1] Message N°3
-server   | 2023-03-17 04:37:09 INFO     action: accept_connections | result: in_progress
-client1  | time="2023-03-17 04:37:09" level=info msg="action: receive_message | result: success | client_id: 1 | msg: [CLIENT 1] Message N°3\n"
-server   | 2023-03-17 04:37:14 INFO     action: accept_connections | result: success | ip: 172.25.125.3
-server   | 2023-03-17 04:37:14 INFO     action: receive_message | result: success | ip: 172.25.125.3 | msg: [CLIENT 1] Message N°4
-client1  | time="2023-03-17 04:37:14" level=info msg="action: receive_message | result: success | client_id: 1 | msg: [CLIENT 1] Message N°4\n"
-server   | 2023-03-17 04:37:14 INFO     action: accept_connections | result: in_progress
-client1  | time="2023-03-17 04:37:19" level=info msg="action: timeout_detected | result: success | client_id: 1"
-client1  | time="2023-03-17 04:37:19" level=info msg="action: loop_finished | result: success | client_id: 1"
-client1 exited with code 0
+git checkout docker
 ```
 
-## Parte 1: Introducción a Docker
-En esta primera parte del trabajo práctico se plantean una serie de ejercicios que sirven para introducir las herramientas básicas de Docker que se utilizarán a lo largo de la materia. El entendimiento de las mismas será crucial para el desarrollo de los próximos TPs.
+#### Ejercicios 1-2
+Para correr el script que genera el docker-compose con la cantidad de clientes deseada basta correr los comandos (Es necesario
+tener python instalado en la máquina host):
+```
+pip install Jinja2
+```
+```
+python docker-config.py <nro_clientes>
+```
 
-### Ejercicio N°1:
-Modificar la definición del DockerCompose para agregar un nuevo cliente al proyecto.
+#### Ejercicio 3
+Para que se corra el script correspondiente al ejercicio 3, dado que esta agregado como un servicio nuevo al docker-compose, basta
+con correr el siguiente comando:
+```
+make docker-compose-up
+```
+Y para ver los logs de un servicio en particular:
+```
+docker logs <nombre_servicio> 
+```
+Para ver los logs del script:
+```
+docker logs script 
+```
+Para ver todos los logs;
+```
+make docker-compose-logs
+```
 
-### Ejercicio N°1.1:
-Definir un script (en el lenguaje deseado) que permita crear una definición de DockerCompose con una cantidad configurable de clientes.
 
-### Ejercicio N°2:
-Modificar el cliente y el servidor para lograr que realizar cambios en el archivo de configuración no requiera un nuevo build de las imágenes de Docker para que los mismos sean efectivos. La configuración a través del archivo correspondiente (`config.ini` y `config.yaml`, dependiendo de la aplicación) debe ser inyectada en el container y persistida afuera de la imagen (hint: `docker volumes`).
+#### Ejercicio 4
+Para ejecutar este ejercicio simplemente correr el comando:
+```
+make docker-compose-up
+```
+Y luego para que se ejecuten los handlers de SIGTERM hay varias opciones, si se quiere enviar a todos los servicio (solo tiene efecto si los clientes
+no finalizaron aún)
+```
+make docker-compose-down
+```
+Si se quiere enviar a uno en especifico
+```
+docker stop <nombre_servicio> -t <tiempo>
+```
+Y para ver los logs se utilizan los mismos comandos explicados en el Ejercicio 3
 
-### Ejercicio N°3:
-Crear un script que permita verificar el correcto funcionamiento del servidor utilizando el comando `netcat` para interactuar con el mismo. Dado que el servidor es un EchoServer, se debe enviar un mensaje al servidor y esperar recibir el mismo mensaje enviado. Netcat no debe ser instalado en la máquina _host_ y no se puede exponer puertos del servidor para realizar la comunicación (hint: `docker network`).
+### 1.1 Ejercicios 5-8
 
-### Ejercicio N°4:
-Modificar servidor y cliente para que ambos sistemas terminen de forma _graceful_ al recibir la signal SIGTERM. Terminar la aplicación de forma _graceful_ implica que todos los _file descriptors_ (entre los que se encuentran archivos, sockets, threads y procesos) deben cerrarse correctamente antes que el thread de la aplicación principal muera. Loguear mensajes en el cierre de cada recurso (hint: Verificar que hace el flag `-t` utilizado en el comando `docker compose down`).
+Para ejecutar cada uno de estos ejercicios dirigirse a su branch correspondiente:
+```
+git checkout ej<nro_ejercicio>
+```
+Y luego los comandos para ejecución, finalización y logs son los mismos explicados anteriormente
 
-## Parte 2: Repaso de Comunicaciones
+El flujo normal para cada ejercicio es el siguiente:
 
-Las secciones de repaso del trabajo práctico plantean un caso de uso denominado **Lotería Nacional**. Para la resolución de las mismas deberá utilizarse como base al código fuente provisto en la primera parte, con las modificaciones agregadas en el ejercicio 4.
+Ejecución:
+```
+make docker-compose-up
+```
+Logs (se recomienda la segunda opción para ver cada servicio por separado):
+```
+make docker-compose-logs
+```
+```
+docker logs <nombre_servicio> 
+```
+Finalización:
+```
+make docker-compose-down
+```
+```
+docker stop <nombre_servicio> -t <tiempo>
+```
 
-### Ejercicio N°5:
-Modificar la lógica de negocio tanto de los clientes como del servidor para nuestro nuevo caso de uso.
 
-#### Cliente
-Emulará a una _agencia de quiniela_ que participa del proyecto. Existen 5 agencias. Deberán recibir como variables de entorno los campos que representan la apuesta de una persona: nombre, apellido, DNI, nacimiento, numero apostado (en adelante 'número'). Ej.: `NOMBRE=Santiago Lionel`, `APELLIDO=Lorca`, `DOCUMENTO=30904465`, `NACIMIENTO=1999-03-17` y `NUMERO=7574` respectivamente.
 
-Los campos deben enviarse al servidor para dejar registro de la apuesta. Al recibir la confirmación del servidor se debe imprimir por log: `action: apuesta_enviada | result: success | dni: ${DNI} | numero: ${NUMERO}`.
+## 2. Protocolo<a name="Protocolo"></a>
 
-#### Servidor
-Emulará a la _central de Lotería Nacional_. Deberá recibir los campos de la cada apuesta desde los clientes y almacenar la información mediante la función `store_bet(...)` para control futuro de ganadores. La función `store_bet(...)` es provista por la cátedra y no podrá ser modificada por el alumno.
-Al persistir se debe imprimir por log: `action: apuesta_almacenada | result: success | dni: ${DNI} | numero: ${NUMERO}`.
+En la siguiente sección se describe el protocolo implementado. Se realizará una distinción entre lo implementado para el ejercicio 5 y lo implementado 
+desde el ejercicio 6 en adelante
 
-#### Comunicación:
-Se deberá implementar un módulo de comunicación entre el cliente y el servidor donde se maneje el envío y la recepción de los paquetes, el cual se espera que contemple:
-* Definición de un protocolo para el envío de los mensajes.
-* Serialización de los datos.
-* Correcta separación de responsabilidades entre modelo de dominio y capa de comunicación.
-* Correcto empleo de sockets, incluyendo manejo de errores y evitando los fenómenos conocidos como [_short read y short write_](https://cs61.seas.harvard.edu/site/2018/FileDescriptors/).
+### 2.1 Ejercicio 5
 
-### Ejercicio N°6:
-Modificar los clientes para que envíen varias apuestas a la vez (modalidad conocida como procesamiento por _chunks_ o _batchs_). La información de cada agencia será simulada por la ingesta de su archivo numerado correspondiente, provisto por la cátedra dentro de `.data/datasets.zip`.
-Los _batchs_ permiten que el cliente registre varias apuestas en una misma consulta, acortando tiempos de transmisión y procesamiento. La cantidad de apuestas dentro de cada _batch_ debe ser configurable. Realizar una implementación genérica, pero elegir un valor por defecto de modo tal que los paquetes no excedan los 8kB. El servidor, por otro lado, deberá responder con éxito solamente si todas las apuestas del _batch_ fueron procesadas correctamente.
+Para el envio de una apuesta por parte del cliente y el correspondiete acknowledgment por parte del servidor se definió el siguiente protocolo. En primer lugar, 
+se estableció un encabezado común a todos los paquetes del protocolo. La estructura de un paquete es la siguiente: 
 
-### Ejercicio N°7:
-Modificar los clientes para que notifiquen al servidor al finalizar con el envío de todas las apuestas y así proceder con el sorteo.
-Inmediatamente después de la notificacion, los clientes consultarán la lista de ganadores del sorteo correspondientes a su agencia.
-Una vez el cliente obtenga los resultados, deberá imprimir por log: `action: consulta_ganadores | result: success | cant_ganadores: ${CANT}`.
+<img src="imagenes/EstructuraPaquete.png" alt="Texto alternativo">
 
-El servidor deberá esperar la notificación de las 5 agencias para considerar que se realizó el sorteo e imprimir por log: `action: sorteo | result: success`.
-Luego de este evento, podrá verificar cada apuesta con las funciones `load_bets(...)` y `has_won(...)` y retornar los DNI de los ganadores de la agencia en cuestión. Antes del sorteo, no podrá responder consultas por la lista de ganadores.
-Las funciones `load_bets(...)` y `has_won(...)` son provistas por la cátedra y no podrán ser modificadas por el alumno.
+Donde packet_type define el tipo de paquete enviado. Se tienen los siguientes tipos de paquete para este punto
 
-## Parte 3: Repaso de Concurrencia
+<img src="imagenes/TiposDePaquete.png" alt="Texto alternativo">
 
-### Ejercicio N°8:
-Modificar el servidor para que permita aceptar conexiones y procesar mensajes en paralelo.
-En este ejercicio es importante considerar los mecanismos de sincronización a utilizar para el correcto funcionamiento de la persistencia.
+Luego, el id identifica al cliente enviado al mensaje y el packet_size indica la longitud en bytes total del paquete
 
-En caso de que el alumno implemente el servidor Python utilizando _multithreading_,  deberán tenerse en cuenta las [limitaciones propias del lenguaje](https://wiki.python.org/moin/GlobalInterpreterLock).
+En el caso de un paquete Bet a continuación del encabezado se envian los datos de la apuesta, con los campos de la misma separados por el carácter "|".
+Si se trata de un BetAck se envia simplemente un código de status en el payload y los campos necesarios también separados por un "|". Siempre
+que haya que dividir los campos del payload de un paquete en protocolo se usara "|"
 
-## Consideraciones Generales
-Se espera que los alumnos realicen un _fork_ del presente repositorio para el desarrollo de los ejercicios.
-El _fork_ deberá contar con una sección de README que indique como ejecutar cada ejercicio.
-La Parte 2 requiere una sección donde se explique el protocolo de comunicación implementado.
-La Parte 3 requiere una sección que expliquen los mecanismos de sincronización utilizados.
+Finalmente, se agrega un padding para hacer que los bloques sean de tamaño fijo. En este caso el tamaño elegido fue de 128 bytes
 
-Finalmente, se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección provistos [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+### 2.2 Ejercicio 6
+
+A partir del ejercicio 6 se agrega 1 byte más para el largo del paquete (Ya que al enviar batchs no alcanzaba con uno solo) 
+salvo en los paquetes Bet. El endianness de este campo es little endian. Los paquetes de Bet implementados en el ejercicio 5 se usan ahora 
+como parte del payload del nuevo paquete Batch. La estructura de un paquete queda entonces:
+
+<img src="imagenes/EstructuraPaquete2.png" alt="Texto alternativo">
+
+Para separar los Bets dentro de un Batch se utiliza el packet_size indicado por cada Bet.
+En el ejercicio 6 se introducen los paquetes Batch, BatchAck y Finished con los siguientes packet_type:
+
+<img src="imagenes/TiposDePaquete2.png" alt="Texto alternativo">
+
+El flujo de paquetes en condiciones normales es el siguiente:
+
+<img src="imagenes/Flujo.png" alt="Texto alternativo">
+
+Al igual que BetAck, BatchAck en el payload envia un código de status.
+
+Finalmente,a partir de este ejercicio el tamaño fijo de los bloques se redefine a 8192 bytes
+
+### 2.3 Ejercicio 7
+En el ejercicio 7 se introduce el paquete Winner (ID: 6) para que el cliente consulte por los ganadores de la lotería en su agencia y el servidor pueda informarlos.
+El encabezado es igual a lo definido anteriormente. En el payload de este paquete se indica un byte de status, para que el servidor informe al cliente
+si el paquete Winner que envia contiene la información o no de los ganadores. Esto se debe a que el cliente va a enviar el paquete Winner y el sorteo puede
+no haber sido realizado aún. Si al cliente le llega un paquete Winner con status 0 realiza un sleep hasta volver a realizar la consulta. El tiempo
+de sleep va aumentando exponencialmente cada vez que se recibe una respuesta del servidor con status 0. El flujo de consulta es el siguiente:
+
+
+<img src="imagenes/Flujo2.png" alt="Texto alternativo">
+
+
+
+## 3. Sincronización<a name="Sincronización"></a>
+Para poder recibir y procesar mensajes en paralelo como se requiere en el Ejercicio 8, se utilizó la libreria de python multiprocessing.
+Cada vez que llegue una conexión al servidor se spawnea un proceso y se le envian los argumentos necesarios para sincronizar sus
+accesos a disco para guardar/cargar apuestas o acceder a memoria que comparten los procesos. Los procesos no terminan hasta no terminar 
+de manejar adecuadamente el flujo de mensajes con su cliente correspondiente.
+
+Para el caso de hacer process safe el uso de las funciones **store_bets()** y **load_bets()** simplemente se opto por un lock
+llamado *utils_function_lock*, el cual los procesos adquieren previo a utilizarlas y liberan luego de finalizar su uso.
+
+Por otro lado, para que cada proceso pueda registrar que su cliente termino de enviar apuestas y todos puedan consultar esto
+(y eventualmente responder al mensaje Winner de un cliente con los ganadores o decirle que espere) se utiliza un tipo provisto
+por la libreria multiprocessing como lo es Array, para el cual tambien se define un lock para acceso exclusivo *clients_ready_lock*
+
+Finalmente, hay también un uso del tipo Value provisto por multiprocessing (de nuevo junto a un lock para su acceso) el cual se
+utiliza para el graceful shutwdown en caso de recibir el proceso principal la señal SIGTERM
+
+
