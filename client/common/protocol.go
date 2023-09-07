@@ -76,7 +76,7 @@ func BetAckFromBytes(bytes []byte) *BetAck {
 		Data: BetAckData{
 			Document: fields[0],
 			Number:   fields[1],
-			Status:   string(fields[2][0]),
+			Status:   fields[2],
 		},
 	}
 	return betAck

@@ -7,6 +7,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const BlockSize = 128
+
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
 	ID            string
@@ -93,16 +95,19 @@ func (c *Client) SendClientBet(b Bet) {
 
 // Sends a message to the server
 func (c *Client) SendMessage(b []byte) {
-	sent_bytes := 0
-	bytes_to_send := len(b)
-	for sent_bytes < bytes_to_send {
-		sent, err := c.conn.Write(b[sent_bytes:])
+	sentBytes := 0
+	bytesToSend := len(b)
+	paddingLength := BlockSize - bytesToSend
+	padding := make([]byte, paddingLength)
+	message := append(b, padding...)
+	for sentBytes < BlockSize {
+		sent, err := c.conn.Write(message[sentBytes:])
 
 		if err != nil {
 			return
 		}
 
-		sent_bytes += sent
+		sentBytes += sent
 	}
 
 }
@@ -110,21 +115,21 @@ func (c *Client) SendMessage(b []byte) {
 // Receives a message from the server. In
 // case of failure returns and error
 func (c *Client) ReadMessage() (bytes []byte, err error) {
-	msg := make([]byte, 1024)
-	read_bytes := 0
-	size_of_packet := 1
+	msg := make([]byte, BlockSize)
+	readBytes := 0
+	sizeOfPacket := 1
 	size_read := false //Indicates whether the size of the packet has already been read or not
-	for read_bytes < size_of_packet {
-		read, err := c.conn.Read(msg[read_bytes:])
+	for readBytes < BlockSize {
+		read, err := c.conn.Read(msg[readBytes:])
 		if err != nil {
 			return msg, err
 		}
-		read_bytes += read
+		readBytes += read
 		if !size_read {
-			size_of_packet = int(msg[2])
+			sizeOfPacket = int(msg[2])
 			size_read = true
 		}
 	}
 
-	return msg, nil
+	return msg[:sizeOfPacket], nil
 }

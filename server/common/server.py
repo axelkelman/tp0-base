@@ -4,6 +4,7 @@ import logging
 from .protocol import BET_PKT, BetAckPacket, bet_from_bytes
 from .utils import store_bets
 
+BLOCK_SIZE = 128
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -83,21 +84,23 @@ class Server:
         bytes = []
         size_of_packet = 1
         size_read = False
-        while bytes_read < size_of_packet:
-            bytes += list(client_sock.recv(1024))
-            bytes_read += len(bytes)
+        while bytes_read < BLOCK_SIZE:
+            bytes += list(client_sock.recv(BLOCK_SIZE - bytes_read))
+            bytes_read = len(bytes)
             if not size_read:
                 size_of_packet = bytes[2]
                 size_read = True
         
         addr = client_sock.getpeername()
-        return bytes,addr
+        return bytes[:size_of_packet],addr
     
     def __write_client_socket(self,msg,client_sock):
         """Writes message to a specific socket client"""
         sent_bytes = 0
-        while sent_bytes < len(msg):
-            sent = client_sock.send(msg[sent_bytes:])
+        padding_length = BLOCK_SIZE - len(msg)
+        message = msg + (b'\x00' * padding_length)
+        while sent_bytes < BLOCK_SIZE:
+            sent = client_sock.send(message[sent_bytes:])
             sent_bytes += sent
             
         

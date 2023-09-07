@@ -11,7 +11,7 @@ class PacketHeader:
         self.id = id
         
     def header_to_bytes(self,payload_size):
-        return [self.packet_type,self.id,payload_size]
+        return [self.packet_type,self.id,payload_size + 3]
         
 
 class BetPacket:
